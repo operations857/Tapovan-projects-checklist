@@ -183,7 +183,7 @@
   let saving = false;
 
   // ↓↓↓ PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (see setup guide) ↓↓↓
-  const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/tapovanestates.com/s/AKfycbzhHnyYYvXHvticekw80ZfGMWD0jM47STSQt-YEYN0uOZ5WTxTK3013IsOeIvVb2XGQhw/exec';
+  const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';
   // ↑↑↑ ends in /exec, looks like https://script.google.com/macros/s/XXXXX/exec ↑↑↑
 
   const ROOM_TEMPLATES = {
@@ -219,9 +219,18 @@
   };
 
   function logActivity(action){
+    const entry = { who: state.currentUser || 'Someone', action, ts: Date.now() };
     if(!state.data.log) state.data.log = [];
-    state.data.log.unshift({ who: state.currentUser || 'Someone', action, ts: Date.now() });
+    state.data.log.unshift(entry);
     if(state.data.log.length > 200) state.data.log.length = 200;
+    postLogEntry(entry);
+  }
+
+  async function postLogEntry(entry){
+    if(APPS_SCRIPT_URL.includes('PASTE_YOUR')) return;
+    try{
+      await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ type:'log', who: entry.who, action: entry.action, ts: entry.ts }) });
+    }catch(e){ /* best-effort — local log already has it */ }
   }
 
   const ICONS = {
