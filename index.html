@@ -153,6 +153,20 @@
 #scw .navbtn span{font-family:'Barlow Condensed',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.03em; text-transform:uppercase;}
 #scw .navbtn:disabled{opacity:0.3; cursor:not-allowed;}
 
+#scw .who-badge{
+  font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:0.03em; text-transform:uppercase;
+  font-size:11px; background:var(--concrete); border:1px solid var(--border); color:var(--ink);
+  padding:8px 12px; border-radius:20px; cursor:pointer; white-space:nowrap;
+}
+#scw .who-badge:hover{border-color:var(--orange); color:var(--orange);}
+#scw .activity-block{margin-top:18px; padding-top:14px; border-top:1px solid var(--border);}
+#scw .log-row{display:flex; align-items:baseline; gap:6px; font-size:12.5px; padding:6px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;}
+#scw .log-row:last-child{border-bottom:none;}
+#scw .log-who{font-weight:700; color:var(--blue);}
+#scw .log-action{color:var(--ink); flex:1;}
+#scw .log-time{color:var(--rebar); font-size:11px; margin-left:auto;}
+#scw .item-updated{font-size:10.5px; color:var(--rebar); margin-top:2px;}
+
 #scw .loading{display:flex; align-items:center; justify-content:center; height:60vh; color:var(--rebar); font-family:'Barlow Condensed',sans-serif;}
 #scw .toast{
   position:fixed; bottom:78px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff;
@@ -169,7 +183,7 @@
   let saving = false;
 
   // ↓↓↓ PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (see setup guide) ↓↓↓
-  const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/tapovanestates.com/s/AKfycbzhHnyYYvXHvticekw80ZfGMWD0jM47STSQt-YEYN0uOZ5WTxTK3013IsOeIvVb2XGQhw/exec';
+  const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';
   // ↑↑↑ ends in /exec, looks like https://script.google.com/macros/s/XXXXX/exec ↑↑↑
 
   const ROOM_TEMPLATES = {
@@ -182,12 +196,33 @@
 
   function uid(p){ return p+'_'+Math.random().toString(36).slice(2,9); }
 
+  function lsGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+  function lsSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
+  function lsRemove(key){ try{ localStorage.removeItem(key); }catch(e){} }
+
+  function timeAgo(ts){
+    const diff = Date.now()-ts;
+    const mins = Math.floor(diff/60000);
+    if(mins<1) return 'just now';
+    if(mins<60) return mins+'m ago';
+    const hrs = Math.floor(mins/60);
+    if(hrs<24) return hrs+'h ago';
+    return Math.floor(hrs/24)+'d ago';
+  }
+
   let state = {
-    data: { projects: [], units: [], rooms: [], items: [], users: [] },
+    data: { projects: [], units: [], rooms: [], items: [], users: [], log: [] },
     tab: 'projects',
     selProject: null, selUnit: null, selRoom: null,
-    search: '', addOpen: null, formType: '2BHK'
+    search: '', addOpen: null, formType: '2BHK',
+    currentUser: lsGet('sc_user_name') || null
   };
+
+  function logActivity(action){
+    if(!state.data.log) state.data.log = [];
+    state.data.log.unshift({ who: state.currentUser || 'Someone', action, ts: Date.now() });
+    if(state.data.log.length > 200) state.data.log.length = 200;
+  }
 
   const ICONS = {
     projects: '<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/>',
@@ -211,6 +246,7 @@
       const text = await res.text();
       const parsed = JSON.parse(text || '{}');
       if(parsed && parsed.projects) state.data = parsed;
+      if(!state.data.log) state.data.log = [];
     }catch(e){ toast('Could not load data — check your Apps Script URL'); }
     render();
   }
@@ -274,8 +310,36 @@
     }).join('') + '</div>';
   }
 
+  // ---------- identity ----------
+  function renderIdentityScreen(){
+    const chips = state.data.users.length ? `<div class="chiprow" style="margin-top:10px;">${state.data.users.map(u=>`<button type="button" class="chip" data-pick-name="${u.name}">${u.name}</button>`).join('')}</div>` : '';
+    root.innerHTML = `<div class="topbar"><div class="titlerow"><h1 class="disp">Who's this?</h1></div></div>
+      <div class="body">
+        <div class="panel">
+          <span class="eyebrow">Enter your name</span>
+          <div class="field"><input id="f_identity" placeholder="e.g. Ramesh Kumar"></div>
+          ${chips}
+          <div class="panel-actions"><button class="btn-primary" data-action="save-identity">Continue</button></div>
+        </div>
+        <div style="font-size:12px;color:var(--rebar);text-align:center;margin-top:6px;">This just tags your updates so the team can see who changed what. No password needed.</div>
+      </div>`;
+    const btn = root.querySelector('[data-action="save-identity"]');
+    const input = root.querySelector('#f_identity');
+    input.focus();
+    btn.addEventListener('click', ()=>{
+      const val = input.value.trim();
+      if(!val) return toast('Enter your name');
+      lsSet('sc_user_name', val);
+      state.currentUser = val;
+      render();
+    });
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') btn.click(); });
+    root.querySelectorAll('[data-pick-name]').forEach(c=>c.addEventListener('click', ()=>{ input.value = c.dataset.pickName; }));
+  }
+
   // ---------- render dispatcher ----------
   function render(){
+    if(!state.currentUser){ renderIdentityScreen(); return; }
     let html = `<div class="topbar">${crumbs()}${topRow()}${searchRow()}</div><div class="body">`;
     if(state.tab==='projects') html += renderProjects();
     else if(state.tab==='units') html += renderUnits();
@@ -301,7 +365,10 @@
     return true;
   }
   function topRow(){
-    return `<div class="titlerow"><h1 class="disp">${titleFor()}</h1>${canAdd() ? `<button class="addbtn" data-action="toggle-add">+</button>` : ''}</div>`;
+    return `<div class="titlerow"><h1 class="disp">${titleFor()}</h1><div style="display:flex;align-items:center;gap:8px;">
+      <button class="who-badge" data-action="switch-identity" title="Switch who you are">${state.currentUser}</button>
+      ${canAdd() ? `<button class="addbtn" data-action="toggle-add">+</button>` : ''}
+    </div></div>`;
   }
   function searchRow(){
     if(state.addOpen) return '';
@@ -408,6 +475,7 @@
               ${state.data.users.map(u=>`<option value="${u.id}" ${it.assigneeId===u.id?'selected':''}>${u.name}</option>`).join('')}
             </select>
           </div>
+          ${it.updatedBy ? `<div class="item-updated">${it.updatedBy} · ${timeAgo(it.updatedAt)}</div>` : ''}
         </div>
         <button class="status-pill ${it.status}" data-cycle="${it.id}">${it.status==='pending'?'Pending':it.status==='progress'?'In Progress':'Done'}</button>
         <button class="del" data-del="item:${it.id}">&times;</button>
@@ -426,14 +494,21 @@
     let out = '';
     if(state.addOpen==='user') out += userForm();
     const list = state.data.users.filter(u=>u.name.toLowerCase().includes(state.search.toLowerCase()));
-    if(!list.length && !state.addOpen) return out + emptyState('No team members yet','Add people so you can assign work items to them.','user');
-    out += list.map(u=>{
+    if(!list.length && !state.addOpen) out += emptyState('No team members yet','Add people so you can assign work items to them.','user');
+    else out += list.map(u=>{
       const initials = u.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
       return `<div class="user-row"><div class="avatar">${initials}</div>
         <div style="flex:1"><div class="card-name">${u.name}</div><div class="user-role">${u.role||'Team member'}</div></div>
         <button class="kebab" data-del="user:${u.id}">&times;</button></div>`;
     }).join('');
+    out += activitySection();
     return out;
+  }
+  function activitySection(){
+    const log = state.data.log || [];
+    if(!log.length) return '';
+    const rows = log.slice(0,20).map(l=>`<div class="log-row"><span class="log-who">${l.who}</span><span class="log-action">${l.action}</span><span class="log-time">${timeAgo(l.ts)}</span></div>`).join('');
+    return `<div class="activity-block"><span class="eyebrow">Recent Activity</span>${rows}</div>`;
   }
   function userForm(){
     return `<div class="panel"><span class="eyebrow">New Team Member</span>
@@ -472,6 +547,8 @@
     });
     const cancelBtn = root.querySelector('[data-action="cancel-add"]');
     if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ state.addOpen=null; render(); });
+    const whoBtn = root.querySelector('[data-action="switch-identity"]');
+    if(whoBtn) whoBtn.addEventListener('click', ()=>{ lsRemove('sc_user_name'); state.currentUser=null; render(); });
 
     root.querySelectorAll('[data-type]').forEach(b=>b.addEventListener('click', ()=>{ state.formType=b.dataset.type; render(); }));
 
@@ -495,17 +572,24 @@
 
     root.querySelectorAll('[data-quickitem]').forEach(b=>b.addEventListener('click', ()=>{
       state.data.items.push({id:uid('item'), roomId:state.selRoom, name:b.dataset.quickitem, status:'pending', assigneeId:''});
+      logActivity(`added work item "${b.dataset.quickitem}"`);
       save(); render();
     }));
 
     root.querySelectorAll('[data-cycle]').forEach(b=>b.addEventListener('click', ()=>{
       const it = state.data.items.find(x=>x.id===b.dataset.cycle);
       it.status = it.status==='pending' ? 'progress' : it.status==='progress' ? 'done' : 'pending';
+      it.updatedBy = state.currentUser; it.updatedAt = Date.now();
+      const label = it.status==='pending'?'Pending':it.status==='progress'?'In Progress':'Done';
+      logActivity(`marked "${it.name}" as ${label}`);
       save(); render();
     }));
     root.querySelectorAll('[data-assign]').forEach(sel=>sel.addEventListener('change', ()=>{
       const it = state.data.items.find(x=>x.id===sel.dataset.assign);
-      it.assigneeId = sel.value; save(); render();
+      it.assigneeId = sel.value;
+      it.updatedBy = state.currentUser; it.updatedAt = Date.now();
+      logActivity(`assigned "${it.name}" to ${sel.value ? userName(sel.value) : 'Unassigned'}`);
+      save(); render();
     }));
 
     root.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', (e)=>{
@@ -530,6 +614,15 @@
   }
 
   function deleteEntity(type,id){
+    const lookup = {
+      project: state.data.projects.find(x=>x.id===id),
+      unit: state.data.units.find(x=>x.id===id),
+      room: state.data.rooms.find(x=>x.id===id),
+      item: state.data.items.find(x=>x.id===id),
+      user: state.data.users.find(x=>x.id===id)
+    };
+    const entity = lookup[type];
+    if(entity) logActivity(`deleted ${type} "${entity.name}"`);
     if(type==='project'){
       const unitIds = unitsOf(id).map(u=>u.id);
       const roomIds = state.data.rooms.filter(r=>unitIds.includes(r.unitId)).map(r=>r.id);
@@ -563,6 +656,7 @@
       const code = root.querySelector('#f_code').value.trim() || 'P'+(state.data.projects.length+1);
       if(!name) return toast('Enter a project name');
       state.data.projects.push({id:uid('proj'), name, code});
+      logActivity(`added project "${name}"`);
     } else if(type==='unit'){
       const name = root.querySelector('#f_name').value.trim();
       if(!name) return toast('Enter a unit name');
@@ -574,21 +668,25 @@
           state.data.rooms.push({id:uid('room'), unitId, name:rname, code:`R-${name}-${rcode}`});
         });
       }
+      logActivity(`added unit "${name}"`);
     } else if(type==='room'){
       const name = root.querySelector('#f_name').value.trim();
       const code = root.querySelector('#f_code').value.trim() || name.slice(0,3).toUpperCase();
       if(!name) return toast('Enter a room name');
       const unit = state.data.units.find(u=>u.id===state.selUnit);
       state.data.rooms.push({id:uid('room'), unitId:state.selUnit, name, code:`R-${unit.name}-${code}`});
+      logActivity(`added room "${name}"`);
     } else if(type==='item'){
       const name = root.querySelector('#f_name').value.trim();
       if(!name) return toast('Enter an item name');
       state.data.items.push({id:uid('item'), roomId:state.selRoom, name, status:'pending', assigneeId:''});
+      logActivity(`added work item "${name}"`);
     } else if(type==='user'){
       const name = root.querySelector('#f_name').value.trim();
       const role = root.querySelector('#f_role').value.trim();
       if(!name) return toast('Enter a name');
       state.data.users.push({id:uid('user'), name, role});
+      logActivity(`added team member "${name}"`);
     }
     state.addOpen=null;
     save(); render();
