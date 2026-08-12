@@ -175,16 +175,27 @@
 #scw .toast.show{opacity:1;}
 </style>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <div id="scw"><div class="loading">Loading site data…</div></div>
 
 <script>
 (function(){
   const root = document.getElementById('scw');
   let saving = false;
+  let docRef = null;
 
-  // ↓↓↓ PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (see setup guide) ↓↓↓
-  const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/tapovanestates.com/s/AKfycbxhiTQucTxjv9I9Xncs16w5mjc3UNLIKXdLH_99wiMYsIzx-C8CrjycrAiQB3BSWN6-KQ/exec';
-  // ↑↑↑ ends in /exec, looks like https://script.google.com/macros/s/XXXXX/exec ↑↑↑
+  // ↓↓↓ PASTE YOUR FIREBASE CONFIG HERE (see setup guide) ↓↓↓
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCM-QOK0pBUuyIMt9HKELTC259AAVGwxD0",
+    authDomain: "tapovan-checklist.firebaseapp.com",
+    projectId: "tapovan-checklist",
+    storageBucket: "tapovan-checklist.firebasestorage.app",
+    messagingSenderId: "241270667154",
+    appId: "1:241270667154:web:6fef89ea386f4ce3df734b"
+  };
+  // ↑↑↑ from Firebase Console → Project settings → Your apps → Web app ↑↑↑
 
   const ROOM_TEMPLATES = {
     '1BHK': [['Foyer','FYR'],['Living Room','LR'],['Kitchen','KIT'],['Master Bedroom','MB'],['Bathroom','B1'],['Balcony','BAL'],['Utility','UTLY']],
@@ -223,14 +234,6 @@
     if(!state.data.log) state.data.log = [];
     state.data.log.unshift(entry);
     if(state.data.log.length > 200) state.data.log.length = 200;
-    postLogEntry(entry);
-  }
-
-  async function postLogEntry(entry){
-    if(APPS_SCRIPT_URL.includes('PASTE_YOUR')) return;
-    try{
-      await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ type:'log', who: entry.who, action: entry.action, ts: entry.ts }) });
-    }catch(e){ /* best-effort — local log already has it */ }
   }
 
   const ICONS = {
@@ -243,27 +246,33 @@
   function icon(name){ return `<svg viewBox="0 0 24 24" fill="none">${ICONS[name]}</svg>`; }
 
   async function init(){
-    if(APPS_SCRIPT_URL.includes('PASTE_YOUR')){
+    if(FIREBASE_CONFIG.apiKey.includes('PASTE_YOUR')){
       root.innerHTML = `<div class="loading" style="flex-direction:column;gap:10px;padding:40px 30px;text-align:center;">
-        <div>⚠️ Not connected to your Google Sheet yet.</div>
-        <div style="font-size:12px;">Open this file's code, find <code>APPS_SCRIPT_URL</code> near the top of the &lt;script&gt; tag, and paste in your deployed Apps Script web app URL. See the setup guide for the copy-paste steps.</div>
+        <div>⚠️ Not connected to Firebase yet.</div>
+        <div style="font-size:12px;">Open this file's code, find <code>FIREBASE_CONFIG</code> near the top of the &lt;script&gt; tag, and paste in your project's config values. See the setup guide for the copy-paste steps.</div>
       </div>`;
       return;
     }
     try{
-      const res = await fetch(APPS_SCRIPT_URL);
-      const text = await res.text();
-      const parsed = JSON.parse(text || '{}');
-      if(parsed && parsed.projects) state.data = parsed;
-      if(!state.data.log) state.data.log = [];
-    }catch(e){ toast('Could not load data — check your Apps Script URL'); }
-    render();
+      firebase.initializeApp(FIREBASE_CONFIG);
+      const db = firebase.firestore();
+      docRef = db.collection('checklist').doc('main');
+      docRef.onSnapshot((snap)=>{
+        if(snap.exists){
+          const remote = snap.data();
+          if(remote && remote.projects) state.data = remote;
+        }
+        if(!state.data.log) state.data.log = [];
+        render();
+      }, (err)=>{ toast('Could not load data — check your Firebase setup'); });
+    }catch(e){ toast('Could not connect to Firebase'); }
   }
 
   async function save(){
+    if(!docRef) return;
     try{
       saving = true;
-      await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(state.data) });
+      await docRef.set(state.data);
     }catch(e){ toast('Could not save — check connection'); }
     finally{ saving = false; }
   }
