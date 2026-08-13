@@ -160,14 +160,27 @@
 }
 #scw .who-badge:hover{border-color:var(--orange); color:var(--orange);}
 #scw .activity-block{margin-top:18px; padding-top:14px; border-top:1px solid var(--border);}
-#scw .pr-row{display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);}
+#scw .reports-grid{display:flex; gap:14px; align-items:flex-start;}
+#scw .reports-col{flex:1; min-width:0; padding-right:14px; border-right:1px solid var(--border);}
+#scw .reports-col:last-child{border-right:none; padding-right:0;}
+#scw .reports-col .eyebrow{display:block; margin-bottom:8px;}
+@media (max-width:420px){
+  #scw .reports-grid{flex-direction:column;}
+  #scw .reports-col{border-right:none; padding-right:0; border-bottom:1px solid var(--border); padding-bottom:14px; margin-bottom:14px;}
+  #scw .reports-col:last-child{border-bottom:none; padding-bottom:0; margin-bottom:0;}
+}
+#scw .pr-row{display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;}
 #scw .pr-row:last-child{border-bottom:none;}
-#scw .pr-project{font-weight:700; font-size:13.5px;}
-#scw .pr-unit{padding-left:14px; font-size:12.5px; color:var(--ink);}
-#scw .pr-room{padding-left:28px; font-size:12px; color:var(--rebar);}
-#scw .pr-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-#scw .pr-sub{font-size:10.5px; color:var(--rebar); white-space:nowrap; flex-shrink:0;}
-#scw .pr-bar{display:flex; align-items:center; gap:6px; flex:0 0 100px;}
+#scw .pr-project{font-weight:700; font-size:12.5px;}
+#scw .pr-unit{padding-left:10px; font-size:11.5px; color:var(--ink);}
+#scw .pr-room{padding-left:20px; font-size:11px; color:var(--rebar);}
+#scw .pr-label{flex:1; min-width:40px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+#scw .pr-sub{font-size:9.5px; color:var(--rebar); white-space:nowrap; flex-shrink:0;}
+#scw .pr-bar{display:flex; align-items:center; gap:4px; flex:0 0 56px;}
+#scw .pr-bar .pct{min-width:26px; font-size:10.5px;}
+#scw .log-row-stack{padding:6px 0; border-bottom:1px solid var(--border); font-size:11.5px;}
+#scw .log-row-stack:last-child{border-bottom:none;}
+#scw .log-row-top{display:flex; justify-content:space-between; align-items:baseline; gap:6px;}
 #scw .log-row{display:flex; align-items:baseline; gap:6px; font-size:12.5px; padding:6px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;}
 #scw .log-row:last-child{border-bottom:none;}
 #scw .log-who{font-weight:700; color:var(--blue);}
@@ -562,15 +575,21 @@
         ${state.pinOpen ? pinForm() : `<div style="font-size:12.5px;color:var(--rebar);padding:8px 0 10px;">Admin-only: progress report &amp; activity log.</div><button class="tbtn" data-action="open-pin">Enter PIN to view</button>`}
       </div>`;
     }
-    const logRows = log.slice(0,20).map(l=>`<div class="log-row"><span class="log-who">${l.who}</span><span class="log-action">${l.action}</span><span class="log-time">${timeAgo(l.ts)}</span></div>`).join('') || `<div style="font-size:12px;color:var(--rebar);padding:6px 0;">No activity yet.</div>`;
+    const logRows = log.slice(0,20).map(l=>`<div class="log-row-stack"><div class="log-row-top"><span class="log-who">${l.who}</span><span class="log-time">${timeAgo(l.ts)}</span></div><div class="log-action">${l.action}</div></div>`).join('') || `<div style="font-size:12px;color:var(--rebar);padding:6px 0;">No activity yet.</div>`;
     return `<div class="activity-block">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span class="eyebrow" style="margin:0;">Progress Report</span>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
         <button class="tbtn" data-action="lock-reports">Lock reports</button>
       </div>
-      ${progressReportRows()}
-      <div class="eyebrow" style="margin-top:18px;display:block;margin-bottom:4px;">Recent Activity</div>
-      ${logRows}
+      <div class="reports-grid">
+        <div class="reports-col">
+          <span class="eyebrow">Progress Report</span>
+          ${progressReportRows()}
+        </div>
+        <div class="reports-col">
+          <span class="eyebrow">Activity Log</span>
+          ${logRows}
+        </div>
+      </div>
     </div>`;
   }
   function pinForm(){
