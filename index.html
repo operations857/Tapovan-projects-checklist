@@ -198,7 +198,7 @@
   // ↑↑↑ from Firebase Console → Project settings → Your apps → Web app ↑↑↑
 
   // ↓↓↓ CHANGE THIS to whatever PIN you want to gate the reports with ↓↓↓
-  const ADMIN_PIN = '1309';
+  const ADMIN_PIN = '2580';
   // ↑↑↑ share this only with people who should see the Activity report ↑↑↑
 
   const ROOM_TEMPLATES = {
@@ -572,12 +572,11 @@
       if(rm && state.tab==='items') parts.push(null);
       b.addEventListener('click', ()=>{ if(parts[i]) parts[i](); });
     });
-    const addBtn = root.querySelector('[data-action="toggle-add"]');
-    if(addBtn) addBtn.addEventListener('click', ()=>{
+    root.querySelectorAll('[data-action="toggle-add"]').forEach(addBtn=>addBtn.addEventListener('click', ()=>{
       const map = {projects:'project', units:'unit', rooms:'room', items:'item', users:'user'};
       state.addOpen = state.addOpen ? null : map[state.tab];
       render();
-    });
+    }));
     const cancelBtn = root.querySelector('[data-action="cancel-add"]');
     if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ state.addOpen=null; render(); });
     const whoBtn = root.querySelector('[data-action="switch-identity"]');
