@@ -160,24 +160,24 @@
 }
 #scw .who-badge:hover{border-color:var(--orange); color:var(--orange);}
 #scw .activity-block{margin-top:18px; padding-top:14px; border-top:1px solid var(--border);}
-#scw .reports-grid{display:flex; gap:14px; align-items:flex-start;}
-#scw .reports-col{flex:1; min-width:0; padding-right:14px; border-right:1px solid var(--border);}
-#scw .reports-col:last-child{border-right:none; padding-right:0;}
-#scw .reports-col .eyebrow{display:block; margin-bottom:8px;}
-@media (max-width:420px){
-  #scw .reports-grid{flex-direction:column;}
-  #scw .reports-col{border-right:none; padding-right:0; border-bottom:1px solid var(--border); padding-bottom:14px; margin-bottom:14px;}
-  #scw .reports-col:last-child{border-bottom:none; padding-bottom:0; margin-bottom:0;}
+#scw .report-icon-row{display:flex; gap:12px;}
+#scw .report-icon-btn{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:8px;
+  padding:18px 10px; border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--paper); cursor:pointer;
 }
+#scw .report-icon-btn:hover{border-color:var(--orange);}
+#scw .report-icon-btn svg{width:24px; height:24px; stroke:var(--orange); fill:none; stroke-width:1.8;}
+#scw .report-icon-btn span{font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink); text-align:center;}
 #scw .pr-row{display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;}
 #scw .pr-row:last-child{border-bottom:none;}
-#scw .pr-project{font-weight:700; font-size:12.5px;}
-#scw .pr-unit{padding-left:10px; font-size:11.5px; color:var(--ink);}
-#scw .pr-room{padding-left:20px; font-size:11px; color:var(--rebar);}
+#scw .pr-project{font-weight:700; font-size:13.5px;}
+#scw .pr-unit{padding-left:14px; font-size:12.5px; color:var(--ink);}
+#scw .pr-room{padding-left:28px; font-size:12px; color:var(--rebar);}
 #scw .pr-label{flex:1; min-width:40px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 #scw .pr-sub{font-size:9.5px; color:var(--rebar); white-space:nowrap; flex-shrink:0;}
-#scw .pr-bar{display:flex; align-items:center; gap:4px; flex:0 0 56px;}
-#scw .pr-bar .pct{min-width:26px; font-size:10.5px;}
+#scw .pr-bar{display:flex; align-items:center; gap:6px; flex:0 0 100px;}
+#scw .pr-bar .pct{min-width:32px; font-size:11.5px;}
 #scw .log-row-stack{padding:6px 0; border-bottom:1px solid var(--border); font-size:11.5px;}
 #scw .log-row-stack:last-child{border-bottom:none;}
 #scw .log-row-top{display:flex; justify-content:space-between; align-items:baseline; gap:6px;}
@@ -219,7 +219,7 @@
   // ↑↑↑ from Firebase Console → Project settings → Your apps → Web app ↑↑↑
 
   // ↓↓↓ CHANGE THIS to whatever PIN you want to gate the reports with ↓↓↓
-  const ADMIN_PIN = '1309';
+  const ADMIN_PIN = '2580';
   // ↑↑↑ share this only with people who should see the Activity report ↑↑↑
 
   const ROOM_TEMPLATES = {
@@ -253,7 +253,8 @@
     search: '', addOpen: null, formType: '2BHK',
     currentUser: lsGet('sc_user_name') || null,
     reportsUnlocked: lsGet('sc_reports_unlocked') === 'true',
-    pinOpen: false
+    pinOpen: false,
+    reportView: null
   };
 
   function logActivity(action){
@@ -268,7 +269,9 @@
     units: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
     rooms: '<path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6"/>',
     items: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M7 9l2 2 4-4"/><path d="M7 16h6"/>',
-    users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M15.8 14.3c2.4.2 4.2 2.3 4.2 4.7"/>'
+    users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M15.8 14.3c2.4.2 4.2 2.3 4.2 4.7"/>',
+    chart: '<path d="M4 19V5"/><rect x="7" y="10" width="3" height="9" rx="0.5"/><rect x="12" y="6" width="3" height="13" rx="0.5"/><rect x="17" y="13" width="3" height="6" rx="0.5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'
   };
   function icon(name){ return `<svg viewBox="0 0 24 24" fill="none">${ICONS[name]}</svg>`; }
 
@@ -566,6 +569,39 @@
       return `<div class="pr-row pr-project"><span class="pr-label">${p.name}</span><div class="pr-bar">${tapeBar(pPct)}</div></div>${unitsHtml}`;
     }).join('');
   }
+  function csvCell(v){
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }
+  function buildProgressCSV(){
+    const rows = [['Level','Project','Unit','Room','Work Item','Status','Progress %']];
+    state.data.projects.forEach(p=>{
+      rows.push(['PROJECT', p.name, '', '', '', '', unitProgressAll(p.id)+'%']);
+      unitsOf(p.id).forEach(u=>{
+        rows.push(['UNIT', p.name, u.name, '', '', '', roomProgressAll(u.id)+'%']);
+        roomsOf(u.id).forEach(r=>{
+          rows.push(['ROOM', p.name, u.name, r.name, '', '', itemProgress(r.id)+'%']);
+          itemsOf(r.id).forEach(it=>{
+            const statusLabel = it.status==='done'?'Done':it.status==='progress'?'In Progress':'Pending';
+            rows.push(['ITEM', p.name, u.name, r.name, it.name, statusLabel, '']);
+          });
+        });
+      });
+    });
+    return rows.map(r=>r.map(csvCell).join(',')).join('\n');
+  }
+  function downloadProgressCSV(){
+    const csv = buildProgressCSV();
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `progress-report-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
   function activitySection(){
     const log = state.data.log || [];
     const hasContent = log.length || state.data.projects.length;
@@ -575,21 +611,39 @@
         ${state.pinOpen ? pinForm() : `<div style="font-size:12.5px;color:var(--rebar);padding:8px 0 10px;">Admin-only: progress report &amp; activity log.</div><button class="tbtn" data-action="open-pin">Enter PIN to view</button>`}
       </div>`;
     }
+    if(!state.reportView){
+      return `<div class="activity-block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span class="eyebrow" style="margin:0;">Reports</span>
+          <button class="tbtn" data-action="lock-reports">Lock reports</button>
+        </div>
+        <div class="report-icon-row">
+          <button class="report-icon-btn" data-action="show-report" data-report="progress">${icon('chart')}<span>Progress Report</span></button>
+          <button class="report-icon-btn" data-action="show-report" data-report="activity">${icon('clock')}<span>Activity Log</span></button>
+        </div>
+      </div>`;
+    }
+    if(state.reportView==='progress'){
+      return `<div class="activity-block">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <button class="tbtn" data-action="back-report">&larr; Back</button>
+          <div style="display:flex;gap:8px;">
+            <button class="tbtn" data-action="download-progress">Download CSV</button>
+            <button class="tbtn" data-action="lock-reports">Lock</button>
+          </div>
+        </div>
+        <span class="eyebrow" style="display:block;margin-bottom:8px;">Progress Report</span>
+        ${progressReportRows()}
+      </div>`;
+    }
     const logRows = log.slice(0,20).map(l=>`<div class="log-row-stack"><div class="log-row-top"><span class="log-who">${l.who}</span><span class="log-time">${timeAgo(l.ts)}</span></div><div class="log-action">${l.action}</div></div>`).join('') || `<div style="font-size:12px;color:var(--rebar);padding:6px 0;">No activity yet.</div>`;
     return `<div class="activity-block">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-        <button class="tbtn" data-action="lock-reports">Lock reports</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <button class="tbtn" data-action="back-report">&larr; Back</button>
+        <button class="tbtn" data-action="lock-reports">Lock</button>
       </div>
-      <div class="reports-grid">
-        <div class="reports-col">
-          <span class="eyebrow">Progress Report</span>
-          ${progressReportRows()}
-        </div>
-        <div class="reports-col">
-          <span class="eyebrow">Activity Log</span>
-          ${logRows}
-        </div>
-      </div>
+      <span class="eyebrow" style="display:block;margin-bottom:8px;">Activity Log</span>
+      ${logRows}
     </div>`;
   }
   function pinForm(){
@@ -698,8 +752,15 @@
     });
     const lockBtn = root.querySelector('[data-action="lock-reports"]');
     if(lockBtn) lockBtn.addEventListener('click', ()=>{
-      lsRemove('sc_reports_unlocked'); state.reportsUnlocked=false; render();
+      lsRemove('sc_reports_unlocked'); state.reportsUnlocked=false; state.reportView=null; render();
     });
+    root.querySelectorAll('[data-action="show-report"]').forEach(b=>b.addEventListener('click', ()=>{
+      state.reportView = b.dataset.report; render();
+    }));
+    const backReportBtn = root.querySelector('[data-action="back-report"]');
+    if(backReportBtn) backReportBtn.addEventListener('click', ()=>{ state.reportView=null; render(); });
+    const downloadBtn = root.querySelector('[data-action="download-progress"]');
+    if(downloadBtn) downloadBtn.addEventListener('click', downloadProgressCSV);
 
     const saveBtn = root.querySelector('[data-save]');
     if(saveBtn) saveBtn.addEventListener('click', ()=>submitForm(saveBtn.dataset.save));
