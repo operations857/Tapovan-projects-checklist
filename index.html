@@ -160,6 +160,14 @@
 }
 #scw .who-badge:hover{border-color:var(--orange); color:var(--orange);}
 #scw .activity-block{margin-top:18px; padding-top:14px; border-top:1px solid var(--border);}
+#scw .pr-row{display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);}
+#scw .pr-row:last-child{border-bottom:none;}
+#scw .pr-project{font-weight:700; font-size:13.5px;}
+#scw .pr-unit{padding-left:14px; font-size:12.5px; color:var(--ink);}
+#scw .pr-room{padding-left:28px; font-size:12px; color:var(--rebar);}
+#scw .pr-label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+#scw .pr-sub{font-size:10.5px; color:var(--rebar); white-space:nowrap; flex-shrink:0;}
+#scw .pr-bar{display:flex; align-items:center; gap:6px; flex:0 0 100px;}
 #scw .log-row{display:flex; align-items:baseline; gap:6px; font-size:12.5px; padding:6px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;}
 #scw .log-row:last-child{border-bottom:none;}
 #scw .log-who{font-weight:700; color:var(--blue);}
@@ -528,16 +536,42 @@
     out += activitySection();
     return out;
   }
+  function progressReportRows(){
+    if(!state.data.projects.length) return `<div style="font-size:12.5px;color:var(--rebar);padding:6px 0 4px;">No projects yet.</div>`;
+    return state.data.projects.map(p=>{
+      const pPct = unitProgressAll(p.id);
+      const unitsHtml = unitsOf(p.id).map(u=>{
+        const uPct = roomProgressAll(u.id);
+        const roomsHtml = roomsOf(u.id).map(r=>{
+          const items = itemsOf(r.id);
+          const done = items.filter(i=>i.status==='done').length;
+          const rPct = itemProgress(r.id);
+          return `<div class="pr-row pr-room"><span class="pr-label">${r.name}</span><span class="pr-sub">${done}/${items.length} items</span><div class="pr-bar">${tapeBar(rPct)}</div></div>`;
+        }).join('');
+        return `<div class="pr-row pr-unit"><span class="pr-label">${u.name}</span><div class="pr-bar">${tapeBar(uPct)}</div></div>${roomsHtml}`;
+      }).join('');
+      return `<div class="pr-row pr-project"><span class="pr-label">${p.name}</span><div class="pr-bar">${tapeBar(pPct)}</div></div>${unitsHtml}`;
+    }).join('');
+  }
   function activitySection(){
     const log = state.data.log || [];
-    if(!log.length) return '';
+    const hasContent = log.length || state.data.projects.length;
+    if(!hasContent) return '';
     if(!state.reportsUnlocked){
-      return `<div class="activity-block"><span class="eyebrow">Recent Activity</span>
-        ${state.pinOpen ? pinForm() : `<div style="font-size:12.5px;color:var(--rebar);padding:8px 0 10px;">Admin-only report.</div><button class="tbtn" data-action="open-pin">Enter PIN to view</button>`}
+      return `<div class="activity-block"><span class="eyebrow">Reports</span>
+        ${state.pinOpen ? pinForm() : `<div style="font-size:12.5px;color:var(--rebar);padding:8px 0 10px;">Admin-only: progress report &amp; activity log.</div><button class="tbtn" data-action="open-pin">Enter PIN to view</button>`}
       </div>`;
     }
-    const rows = log.slice(0,20).map(l=>`<div class="log-row"><span class="log-who">${l.who}</span><span class="log-action">${l.action}</span><span class="log-time">${timeAgo(l.ts)}</span></div>`).join('');
-    return `<div class="activity-block"><span class="eyebrow">Recent Activity</span><button class="tbtn" style="margin-bottom:10px;" data-action="lock-reports">Lock reports</button>${rows}</div>`;
+    const logRows = log.slice(0,20).map(l=>`<div class="log-row"><span class="log-who">${l.who}</span><span class="log-action">${l.action}</span><span class="log-time">${timeAgo(l.ts)}</span></div>`).join('') || `<div style="font-size:12px;color:var(--rebar);padding:6px 0;">No activity yet.</div>`;
+    return `<div class="activity-block">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span class="eyebrow" style="margin:0;">Progress Report</span>
+        <button class="tbtn" data-action="lock-reports">Lock reports</button>
+      </div>
+      ${progressReportRows()}
+      <div class="eyebrow" style="margin-top:18px;display:block;margin-bottom:4px;">Recent Activity</div>
+      ${logRows}
+    </div>`;
   }
   function pinForm(){
     return `<div style="margin-top:6px;"><input id="f_pin" type="password" inputmode="numeric" placeholder="Enter PIN" style="width:100%;padding:8px 10px;border-radius:7px;border:1px solid var(--border);background:var(--concrete);font-size:13.5px;margin-bottom:8px;">
