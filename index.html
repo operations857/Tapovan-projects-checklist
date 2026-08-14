@@ -209,6 +209,13 @@
 #scw .thread-resolve{margin-top:6px; font-size:10.5px; padding:4px 9px;}
 #scw .thread-input-row{display:flex; gap:6px; margin-top:6px;}
 #scw .thread-input{flex:1; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--paper); font-family:'Inter',sans-serif; font-size:13px;}
+#scw .thread-photo{max-width:220px; width:100%; border-radius:8px; margin-top:8px; display:block; cursor:pointer; border:1px solid var(--border);}
+#scw .photo-label{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; color:var(--ink); background:var(--paper); border:1px solid var(--border); border-radius:14px; padding:7px 12px; cursor:pointer; margin-top:8px;}
+#scw .photo-label:hover{border-color:var(--orange); color:var(--orange);}
+#scw .photo-preview-row{display:flex; align-items:center; gap:10px; margin-top:8px;}
+#scw .photo-thumb{width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid var(--border);}
+#scw .photo-remove{background:none; border:none; color:var(--rebar); cursor:pointer; font-size:12px;}
+#scw .photo-remove:hover{color:var(--orange);}
 
 #scw .loading{display:flex; align-items:center; justify-content:center; height:60vh; color:var(--rebar); font-family:'Barlow Condensed',sans-serif;}
 #scw .toast{
@@ -220,6 +227,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
 <div id="scw"><div class="loading">Loading site data…</div></div>
 
@@ -277,11 +285,55 @@
     reportsUnlocked: lsGet('sc_reports_unlocked') === 'true',
     pinOpen: false,
     reportView: null,
-    openThread: null
+    openThread: null,
+    pendingPhoto: null
   };
 
   function esc(str){
     return String(str==null?'':str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  function compressImage(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = (e)=>{
+        const img = new Image();
+        img.onload = ()=>{
+          const maxDim = 1280;
+          let { width, height } = img;
+          if(width > maxDim || height > maxDim){
+            if(width > height){ height = Math.round(height * maxDim / width); width = maxDim; }
+            else { width = Math.round(width * maxDim / height); height = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('compress failed')), 'image/jpeg', 0.72);
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadPhoto(file, itemId, type){
+    state.pendingPhoto = { itemId, type, uploading:true };
+    render();
+    try{
+      const blob = await compressImage(file);
+      const path = `snag-photos/${itemId}/${Date.now()}.jpg`;
+      const ref = firebase.storage().ref().child(path);
+      await ref.put(blob);
+      const url = await ref.getDownloadURL();
+      state.pendingPhoto = { itemId, type, url, uploading:false };
+      render();
+    }catch(e){
+      state.pendingPhoto = null;
+      toast('Photo upload failed — check connection or Storage setup');
+      render();
+    }
   }
 
   function logActivity(action){
@@ -577,15 +629,23 @@
       <div class="thread-entry ${isSnag && c.resolved ? 'resolved':''}">
         <div class="thread-entry-top"><span class="log-who">${esc(c.who)}</span><span class="log-time">${timeAgo(c.ts)}</span></div>
         <div class="thread-entry-text">${esc(c.text)}</div>
+        ${c.photoUrl ? `<img class="thread-photo" src="${esc(c.photoUrl)}" data-view-photo="${esc(c.photoUrl)}">` : ''}
         ${isSnag ? `<button class="tbtn thread-resolve" data-resolve-snag="${it.id}:${idx}">${c.resolved?'Reopen':'Mark Resolved'}</button>` : ''}
       </div>`).join('') : `<div style="font-size:12px;color:var(--rebar);padding:4px 0 8px;">No ${isSnag?'snags':'comments'} yet.</div>`;
+    const pending = state.pendingPhoto && state.pendingPhoto.itemId===it.id && state.pendingPhoto.type===type ? state.pendingPhoto : null;
+    const photoControl = pending
+      ? (pending.uploading
+          ? `<div class="photo-preview-row"><span style="font-size:11.5px;color:var(--rebar);">Uploading photo…</span></div>`
+          : `<div class="photo-preview-row"><img class="photo-thumb" src="${esc(pending.url)}"><button class="photo-remove" data-remove-pending-photo="1">&times; Remove photo</button></div>`)
+      : `<label class="photo-label" for="photo_input_${it.id}_${type}">📷 Add Photo</label><input type="file" accept="image/*" capture="environment" class="photo-file-input" id="photo_input_${it.id}_${type}" data-photo-item="${it.id}" data-photo-type="${type}" style="display:none;">`;
     return `<div class="thread-panel">
       <div class="thread-header"><span class="eyebrow">${isSnag?'Snag List':'Comments'}</span><button class="tbtn" data-close-thread="1">Close</button></div>
       ${entries}
       <div class="thread-input-row">
         <input type="text" class="thread-input" id="thread_input_${it.id}" placeholder="${isSnag?'Describe the issue…':'Add a comment…'}">
-        <button class="btn-primary" data-add-thread="${it.id}:${type}">Add</button>
+        <button class="btn-primary" data-add-thread="${it.id}:${type}" ${pending && pending.uploading ? 'disabled':''}>Add</button>
       </div>
+      ${photoControl}
     </div>`;
   }
   function itemForm(){
@@ -826,22 +886,37 @@
       } else {
         state.openThread = { itemId, type };
       }
+      state.pendingPhoto = null;
       render();
     }));
     const closeThreadBtn = root.querySelector('[data-close-thread]');
-    if(closeThreadBtn) closeThreadBtn.addEventListener('click', ()=>{ state.openThread=null; render(); });
+    if(closeThreadBtn) closeThreadBtn.addEventListener('click', ()=>{ state.openThread=null; state.pendingPhoto=null; render(); });
     root.querySelectorAll('[data-add-thread]').forEach(b=>b.addEventListener('click', ()=>{
       const [itemId, type] = b.dataset.addThread.split(':');
       const input = root.querySelector(`#thread_input_${itemId}`);
       const text = input.value.trim();
-      if(!text) return toast('Type something first');
+      const pending = state.pendingPhoto && state.pendingPhoto.itemId===itemId && state.pendingPhoto.type===type ? state.pendingPhoto : null;
+      if(pending && pending.uploading) return toast('Photo still uploading — wait a moment');
+      if(!text && !(pending && pending.url)) return toast('Add text or a photo');
       const it = state.data.items.find(x=>x.id===itemId);
       if(!it[type]) it[type] = [];
-      const entry = { who: state.currentUser || 'Someone', text, ts: Date.now() };
+      const entry = { who: state.currentUser || 'Someone', text: text || '', ts: Date.now() };
       if(type==='snags') entry.resolved = false;
+      if(pending && pending.url) entry.photoUrl = pending.url;
       it[type].push(entry);
       logActivity(`${type==='snags'?'logged a snag on':'commented on'} "${it.name}"`);
+      state.pendingPhoto = null;
       save(); render();
+    }));
+    root.querySelectorAll('.photo-file-input').forEach(inp=>inp.addEventListener('change', (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      uploadPhoto(file, inp.dataset.photoItem, inp.dataset.photoType);
+    }));
+    const removePendingBtn = root.querySelector('[data-remove-pending-photo]');
+    if(removePendingBtn) removePendingBtn.addEventListener('click', ()=>{ state.pendingPhoto=null; render(); });
+    root.querySelectorAll('[data-view-photo]').forEach(img=>img.addEventListener('click', ()=>{
+      window.open(img.dataset.viewPhoto, '_blank');
     }));
     root.querySelectorAll('[data-resolve-snag]').forEach(b=>b.addEventListener('click', ()=>{
       const [itemId, idx] = b.dataset.resolveSnag.split(':');
