@@ -187,6 +187,28 @@
 #scw .log-action{color:var(--ink); flex:1;}
 #scw .log-time{color:var(--rebar); font-size:11px; margin-left:auto;}
 #scw .item-updated{font-size:10.5px; color:var(--rebar); margin-top:2px;}
+#scw .item-actions{display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;}
+#scw .icon-btn{
+  display:flex; align-items:center; gap:5px; background:var(--concrete); border:1px solid var(--border);
+  border-radius:14px; padding:4px 10px; cursor:pointer; color:var(--rebar);
+}
+#scw .icon-btn svg{width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; flex-shrink:0;}
+#scw .icon-btn span{font-size:11px; font-weight:600; white-space:nowrap;}
+#scw .icon-btn.active{background:var(--ink); border-color:var(--ink); color:#fff;}
+#scw .icon-btn.snag-btn.has-snag{background:#FCE4DE; border-color:var(--orange); color:var(--orange);}
+#scw .icon-btn.snag-btn.has-snag.active{background:var(--orange); border-color:var(--orange); color:#fff;}
+#scw .thread-panel{
+  background:var(--concrete); border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius);
+  margin:-8px 0 8px; padding:10px 12px 12px;
+}
+#scw .thread-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+#scw .thread-entry{background:var(--paper); border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:6px;}
+#scw .thread-entry.resolved{opacity:0.55;}
+#scw .thread-entry-top{display:flex; justify-content:space-between; gap:8px; font-size:11.5px; margin-bottom:3px;}
+#scw .thread-entry-text{font-size:13px; line-height:1.35;}
+#scw .thread-resolve{margin-top:6px; font-size:10.5px; padding:4px 9px;}
+#scw .thread-input-row{display:flex; gap:6px; margin-top:6px;}
+#scw .thread-input{flex:1; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--paper); font-family:'Inter',sans-serif; font-size:13px;}
 
 #scw .loading{display:flex; align-items:center; justify-content:center; height:60vh; color:var(--rebar); font-family:'Barlow Condensed',sans-serif;}
 #scw .toast{
@@ -254,8 +276,13 @@
     currentUser: lsGet('sc_user_name') || null,
     reportsUnlocked: lsGet('sc_reports_unlocked') === 'true',
     pinOpen: false,
-    reportView: null
+    reportView: null,
+    openThread: null
   };
+
+  function esc(str){
+    return String(str==null?'':str).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
 
   function logActivity(action){
     const entry = { who: state.currentUser || 'Someone', action, ts: Date.now() };
@@ -271,7 +298,9 @@
     items: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M7 9l2 2 4-4"/><path d="M7 16h6"/>',
     users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M15.8 14.3c2.4.2 4.2 2.3 4.2 4.7"/>',
     chart: '<path d="M4 19V5"/><rect x="7" y="10" width="3" height="9" rx="0.5"/><rect x="12" y="6" width="3" height="13" rx="0.5"/><rect x="17" y="13" width="3" height="6" rx="0.5"/>',
-    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+    comment: '<path d="M21 11.5c0 4.14-3.8 7.5-8.5 7.5-1.1 0-2.15-.18-3.1-.51L4 20l1.2-3.6A7.1 7.1 0 014 11.5C4 7.36 7.8 4 12.5 4S21 7.36 21 11.5z"/>',
+    flag: '<path d="M5 21V4"/><path d="M5 4h13l-3 4 3 4H5"/>'
   };
   function icon(name){ return `<svg viewBox="0 0 24 24" fill="none">${ICONS[name]}</svg>`; }
 
@@ -513,7 +542,11 @@
     if(!list.length && !state.addOpen) return out + emptyState('No work items yet','Tap a suggestion above or add a custom item.',null);
     out += list.map(it=>{
       const done = it.status==='done';
-      return `<div class="item-row">
+      const comments = it.comments || [];
+      const snags = it.snags || [];
+      const openSnags = snags.filter(s=>!s.resolved).length;
+      const threadOpen = state.openThread && state.openThread.itemId===it.id;
+      let row = `<div class="item-row">
         <button class="stamp ${it.status}" data-cycle="${it.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></button>
         <div class="item-info">
           <div class="item-name ${done?'done-text':''}">${it.name}</div>
@@ -524,12 +557,36 @@
             </select>
           </div>
           ${it.updatedBy ? `<div class="item-updated">${it.updatedBy} · ${timeAgo(it.updatedAt)}</div>` : ''}
+          <div class="item-actions">
+            <button class="icon-btn ${threadOpen && state.openThread.type==='comments'?'active':''}" data-toggle-thread="${it.id}:comments">${icon('comment')}<span>Comments${comments.length?` (${comments.length})`:''}</span></button>
+            <button class="icon-btn snag-btn ${openSnags>0?'has-snag':''} ${threadOpen && state.openThread.type==='snags'?'active':''}" data-toggle-thread="${it.id}:snags">${icon('flag')}<span>Snag List${snags.length?` (${snags.length})`:''}</span></button>
+          </div>
         </div>
         <button class="status-pill ${it.status}" data-cycle="${it.id}">${it.status==='pending'?'Pending':it.status==='progress'?'In Progress':'Done'}</button>
         <button class="del" data-del="item:${it.id}">&times;</button>
       </div>`;
+      if(threadOpen) row += threadPanel(it, state.openThread.type);
+      return row;
     }).join('');
     return out;
+  }
+  function threadPanel(it, type){
+    const isSnag = type==='snags';
+    const list = it[type] || [];
+    const entries = list.length ? list.map((c,idx)=>`
+      <div class="thread-entry ${isSnag && c.resolved ? 'resolved':''}">
+        <div class="thread-entry-top"><span class="log-who">${esc(c.who)}</span><span class="log-time">${timeAgo(c.ts)}</span></div>
+        <div class="thread-entry-text">${esc(c.text)}</div>
+        ${isSnag ? `<button class="tbtn thread-resolve" data-resolve-snag="${it.id}:${idx}">${c.resolved?'Reopen':'Mark Resolved'}</button>` : ''}
+      </div>`).join('') : `<div style="font-size:12px;color:var(--rebar);padding:4px 0 8px;">No ${isSnag?'snags':'comments'} yet.</div>`;
+    return `<div class="thread-panel">
+      <div class="thread-header"><span class="eyebrow">${isSnag?'Snag List':'Comments'}</span><button class="tbtn" data-close-thread="1">Close</button></div>
+      ${entries}
+      <div class="thread-input-row">
+        <input type="text" class="thread-input" id="thread_input_${it.id}" placeholder="${isSnag?'Describe the issue…':'Add a comment…'}">
+        <button class="btn-primary" data-add-thread="${it.id}:${type}">Add</button>
+      </div>
+    </div>`;
   }
   function itemForm(){
     return `<div class="panel"><span class="eyebrow">New Work Item</span>
@@ -667,7 +724,7 @@
 
   // ---------- events ----------
   function attachEvents(){
-    root.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click', ()=>{ state.tab=b.dataset.nav; state.addOpen=null; state.search=''; render(); }));
+    root.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click', ()=>{ state.tab=b.dataset.nav; state.addOpen=null; state.search=''; state.openThread=null; render(); }));
     root.querySelectorAll('[data-crumb]').forEach((b,i)=>{
       const p = state.data.projects.find(x=>x.id===state.selProject);
       const u = state.data.units.find(x=>x.id===state.selUnit);
@@ -701,7 +758,7 @@
     }));
     root.querySelectorAll('[data-select-room]').forEach(c=>c.addEventListener('click', (e)=>{
       if(e.target.closest('.kebab')) return;
-      state.selRoom=c.dataset.selectRoom; state.tab='items'; state.search=''; render();
+      state.selRoom=c.dataset.selectRoom; state.tab='items'; state.search=''; state.openThread=null; render();
     }));
 
     const searchInput = root.querySelector('#searchInput');
@@ -761,6 +818,39 @@
     if(backReportBtn) backReportBtn.addEventListener('click', ()=>{ state.reportView=null; render(); });
     const downloadBtn = root.querySelector('[data-action="download-progress"]');
     if(downloadBtn) downloadBtn.addEventListener('click', downloadProgressCSV);
+
+    root.querySelectorAll('[data-toggle-thread]').forEach(b=>b.addEventListener('click', ()=>{
+      const [itemId, type] = b.dataset.toggleThread.split(':');
+      if(state.openThread && state.openThread.itemId===itemId && state.openThread.type===type){
+        state.openThread = null;
+      } else {
+        state.openThread = { itemId, type };
+      }
+      render();
+    }));
+    const closeThreadBtn = root.querySelector('[data-close-thread]');
+    if(closeThreadBtn) closeThreadBtn.addEventListener('click', ()=>{ state.openThread=null; render(); });
+    root.querySelectorAll('[data-add-thread]').forEach(b=>b.addEventListener('click', ()=>{
+      const [itemId, type] = b.dataset.addThread.split(':');
+      const input = root.querySelector(`#thread_input_${itemId}`);
+      const text = input.value.trim();
+      if(!text) return toast('Type something first');
+      const it = state.data.items.find(x=>x.id===itemId);
+      if(!it[type]) it[type] = [];
+      const entry = { who: state.currentUser || 'Someone', text, ts: Date.now() };
+      if(type==='snags') entry.resolved = false;
+      it[type].push(entry);
+      logActivity(`${type==='snags'?'logged a snag on':'commented on'} "${it.name}"`);
+      save(); render();
+    }));
+    root.querySelectorAll('[data-resolve-snag]').forEach(b=>b.addEventListener('click', ()=>{
+      const [itemId, idx] = b.dataset.resolveSnag.split(':');
+      const it = state.data.items.find(x=>x.id===itemId);
+      const snag = it.snags[Number(idx)];
+      snag.resolved = !snag.resolved;
+      logActivity(`${snag.resolved?'resolved':'reopened'} a snag on "${it.name}"`);
+      save(); render();
+    }));
 
     const saveBtn = root.querySelector('[data-save]');
     if(saveBtn) saveBtn.addEventListener('click', ()=>submitForm(saveBtn.dataset.save));
